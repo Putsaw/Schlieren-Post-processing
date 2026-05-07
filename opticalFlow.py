@@ -115,31 +115,61 @@ def runOpticalFlowCalculation(firstFrameNumber, video, method, deepflow=None):
     
 
 
-def runOpticalFlowCalculationWeighted(firstFrameNumber, video, method, deepflow=None):
+def runOpticalFlowCalculationWeighted(firstFrameNumber, video, method, deepflow=None, workers=None):
     import cv2
     import numpy as np
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import os
 
     first_frame = video[firstFrameNumber]
-    prev_frame = first_frame
-
     nframes = video.shape[0]
     mag_array = np.zeros_like(video, dtype=np.float32)
 
-    if method == 'Farneback':
-        for i in range(firstFrameNumber, nframes): # limit to half for testing
-            frame = video[i]
-
-            flow = opticalFlowFarnebackCalculation(prev_frame, frame) 
-
-            # Compute magnitude (motion strength) and angle (not needed here)
-            mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-
-            mag_array[i] = mag
-
-            prev_frame = frame
-
-            print(f"Processed frame {i+1}/{nframes}")
-
-        return mag_array # return only magnitude for weighted processing
-    else:
+    if method != 'Farneback':
         raise ValueError(f"Unsupported optical flow method: {method}")
+
+    indices = list(range(firstFrameNumber, nframes))
+    if workers is None:
+        cpu = os.cpu_count() or 1
+        max_workers = min(max(1, cpu), len(indices))
+    else:
+        max_workers = max(1, min(int(workers), len(indices)))
+
+    # sequential fallback
+    if max_workers <= 1:
+        prev_frame = first_frame
+        for i in indices:
+            frame = video[i]
+            flow = opticalFlowFarnebackCalculation(prev_frame, frame)
+            mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+            mag_array[i] = mag
+            prev_frame = frame
+            print(f"Processed frame {i+1}/{nframes}")
+        return mag_array
+
+    def _worker_task(i, prev_frame, frame):
+        flow = opticalFlowFarnebackCalculation(prev_frame, frame)
+        mag, _ = cv2.cartToPolar(flow[..., 0], flow[..., 1])
+        return i, mag
+
+    tasks = []
+    for i in indices:
+        prev = first_frame if i == firstFrameNumber else video[i - 1]
+        frame = video[i]
+        tasks.append((i, prev, frame))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(_worker_task, t[0], t[1], t[2]): t[0] for t in tasks}
+        completed = 0
+        for fut in as_completed(futures):
+            idx = futures[fut]
+            try:
+                i, mag = fut.result()
+            except Exception as e:
+                raise RuntimeError(f"Optical flow worker failed for frame {idx}: {e}")
+            mag_array[i] = mag
+            completed += 1
+            if (completed % 10 == 0) or (completed == len(futures)):
+                print(f"Processed {completed}/{len(futures)} optical flow tasks")
+
+    return mag_array
