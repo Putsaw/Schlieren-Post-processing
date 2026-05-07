@@ -492,3 +492,138 @@ def localThreshold(video, blockSize=11, C=2):
         video[i] = thresh_frame
 
     return video
+
+# function may need adjustment depending on case, but should be a good starting point for estimating nozzle closing time based on multiple heuristics.
+def calculate_closing_point(close_point_distance, penetration, intensity_values, spray_area):
+    """Estimate the frame where the nozzle effectively closes using multiple heuristics.
+
+    Heuristics:
+      - spray_area: find area maximum then the first frame after that showing a sustained decrease
+        (highest weight / most reliable).
+      - intensity_values: find a long 'flat' period followed by a sustained intensity increase
+        (spray becomes lighter / disperses).
+      - close_point_distance: find when the close-point distance becomes large (>=75th percentile)
+        for at least two consecutive frames.
+
+    Returns:
+      int frame index (0-based) or None if inputs are invalid.
+    """
+    import numpy as np
+
+    # Validate and convert inputs
+    try:
+        area = np.asarray(spray_area, dtype=float)
+    except Exception:
+        return None
+
+    n = int(area.size)
+    if n == 0:
+        return None
+
+    def ensure_len(arr):
+        if arr is None:
+            return None
+        a = np.asarray(arr, dtype=float)
+        if a.size >= n:
+            return a[:n]
+        if a.size == 0:
+            return None
+        pad = np.full((n - a.size,), a[-1])
+        return np.concatenate([a, pad])
+
+    intensity = ensure_len(intensity_values)
+    distance = ensure_len(close_point_distance)
+    _ = ensure_len(penetration)  # kept for API compatibility (not used)
+
+    eps = 1e-8
+
+    # Metric 1: spray area peak then sustained decrease (preferred)
+    area_max_idx = int(np.argmax(area))
+    candidate_area = area_max_idx
+    for j in range(area_max_idx + 1, n - 1):
+        # require two-frame decreasing trend to avoid noise
+        if area[j] < area[j - 1] and area[j + 1] < area[j]:
+            candidate_area = j
+            break
+
+    # Metric 2: intensity increase after a long flat period
+    # Start from the area-derived candidate and iteratively move forward while
+    # the next-50-frames mean is higher than the previous-50-frames mean and
+    # the previous window is flat. This shifts the intensity candidate a few
+    # frames later until the condition no longer holds.
+    candidate_intensity = None
+    if intensity is not None:
+        # start from area candidate
+        start_idx = int(candidate_area)
+        window = min(50, n)                       # frames to average before/after
+        step = max(1, int(np.ceil(0.02 * n)))    # shift step: 2% of video or at least 1
+
+        while start_idx < n - 1:
+            pre_start = max(0, start_idx - window)
+            pre = intensity[pre_start:start_idx]
+            post_end = min(n, start_idx + window)
+            post = intensity[start_idx:post_end]
+
+            # If not enough samples, accept current start_idx
+            if pre.size < 3 or post.size < 3:
+                candidate_intensity = start_idx
+                break
+
+            mean_pre = float(np.mean(pre))
+            mean_post = float(np.mean(post))
+            std_pre = float(np.std(pre))
+
+            # flat threshold for preceding window (absolute + relative guard)
+            flat_std_thresh = max(0.5, 0.01 * max(abs(mean_pre), 0.5))
+
+            # If preceding window is flat and following window mean is higher, shift forward
+            if std_pre <= flat_std_thresh and mean_post > mean_pre:
+                start_idx = min(n - 1, start_idx + step)
+                continue
+            else:
+                candidate_intensity = start_idx
+                break
+
+        # fallback to last start_idx if not set
+        if candidate_intensity is None:
+            candidate_intensity = min(start_idx, n - 1)
+
+    # Metric 3: close-point distance above threshold
+    # requires very smooth signal. Needs to happen after nozzle opening.
+    candidate_distance = None
+
+    # Combine candidates with weights (area preferred)
+    candidates = []
+    weights = []
+    if candidate_area is not None:
+        candidates.append(candidate_area); weights.append(0.6)
+    if candidate_intensity is not None:
+        candidates.append(candidate_intensity); weights.append(0.2)
+    if candidate_distance is not None:
+        candidates.append(candidate_distance); weights.append(0.2)
+
+    if len(candidates) == 0:
+        # fallback to area peak if nothing else found
+        return int(candidate_area)
+
+    candidates = np.array(candidates, dtype=float)
+    weights = np.array(weights, dtype=float)
+    weights /= (weights.sum() + eps)
+
+    estimated = int(np.round(np.sum(candidates * weights)))
+    estimated = max(0, min(n - 1, estimated))
+
+    return estimated
+
+
+def calculate_opening_point(cone_mask_f, mag):
+    import numpy as np
+    motion_near_origin = np.any(mag[cone_mask_f] >= 0.5)
+
+    # needs some metric to avoid noise - maybe require multiple consecutive frames above threshold, or a certain percentage of pixels above threshold, or a weighted score based on magnitude values.
+    # could also consider looking for a sustained increase in motion near origin rather than just a single frame above threshold.
+    sustained_motion = np.convolve(mag[cone_mask_f], np.ones(5)/5, mode='valid') >= 0.5
+
+    motion_near_origin = motion_near_origin and np.any(sustained_motion)
+
+    return motion_near_origin

@@ -12,6 +12,7 @@ import tkinter as tk
 from tkinter import filedialog
 import json
 import os
+from geometry import *
 
 
 # TODO:
@@ -121,158 +122,10 @@ for file in all_files:
     #     if key == ord('p'):
     #         cv2.waitKey(-1)
     # cv2.destroyAllWindows()
+
     video_strip2 = video_strip.copy()  # avoid modifying original rotated video for other processing
 
-    # video_strip = vpf.localThreshold(video_strip, blockSize=61, C=2) # Apply local thresholding to enhance contrast, may help with intensity-based detection, can be turned off if not helpful
-    # for i in range(nframes):
-    #     cv2.imshow("Local Thresholding Video Strip", video_strip[i]) # Display local thresholding result for verification, press any key to continue
-    #     cv2.imshow("Original Video Strip", video_strip2[i]) # Display original result for verification, press any key to continue
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-    # cv2.destroyAllWindows()
-
-    ##############################
-    # Freehand Mask Creation
-    ##############################
-
-    # draw_freehand_mask(video_strip) # Allows user to draw a freehand mask on the video strip, saves as "mask.png" for later use in the combined score. 
-    # User can draw multiple separate regions if needed, just make sure to connect them with a line so they are included in the same cluster. 
-    # Press and hold left mouse button to draw, release to stop drawing, press 'q' to finish and save mask.
-
-    ##############################
-    # Filter Visualization
-    ###############################
-
-    
     video_strip = vpf.applyCLAHE(video_strip)
-
-    deepflow = cv2.optflow.createOptFlow_DeepFlow() # type: ignore, requires opencv-contrib-python
-
-    for i in range(1, nframes):
-        flow = of.opticalFlowFarnebackCalculation(video_strip[i-1], video_strip[i]) # Just to test the function and visualize the result, press any key to continue
-        flow_deep = of.opticalFlowDeepFlowCalculation(video_strip[i-1], video_strip[i], deepflow) # Just to test the function and visualize the result, press any key to continue
-
-        mag, ang = cv2.cartToPolar(flow[..., 0], flow[..., 1])
-        mag_deep, ang_deep = cv2.cartToPolar(flow_deep[..., 0], flow_deep[..., 1])
-
-        mag_vis = cv2.normalize(mag, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-        mag_deep_vis = cv2.normalize(mag_deep, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8)
-
-        ang_vis = (ang * 180 / np.pi / 2).astype(np.uint8) # Convert angle to [0,255] for visualization
-        ang_deep_vis = (ang_deep * 180 / np.pi / 2).astype(np.uint8) # Convert angle to [0,255] for visualization
-        cv2.imshow("Optical Flow Magnitude", mag_vis)
-        cv2.imshow("Optical Flow Angle", ang_vis)
-        cv2.imshow("Optical Flow Deep Magnitude", mag_deep_vis)
-        cv2.imshow("Optical Flow Deep Angle", ang_deep_vis)
-        key = cv2.waitKey(30) & 0xFF
-        if key == ord('q'):
-            break
-        if key == ord('p'):
-            cv2.waitKey(-1)
-        
-    break
-    # for i in range(nframes):
-    #     cv2.imshow("CLAHE Video Strip", video_strip[i]) # Display CLAHE result for verification, press any key to continue
-    #     cv2.imshow("Original Video Strip", video_strip2[i]) # Display original result for verification, press any key to continue
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-    # cv2.destroyAllWindows()
-
-    # video_strip = vpf.applyDoGfilter(video_strip) # Apply DoG filter to reduce noise before optical flow
-
-    # for i in range(nframes):
-    #     cv2.imshow("DoG Video Strip", video_strip[i]) # Display DoG result for verification, press any key to continue
-    #     cv2.imshow("Original Video Strip", video_strip2[i]) # Display original result for verification, press any key to continue
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-
-    # analyze_histogram_statistics(video_strip, firstFrameNumber)
-    # display_histogram_animation(video_strip, firstFrameNumber, last_frame=None, delay=50)
-
-    # plot_frame_histogram(video_strip[150], frame_number=150)
-
-
-    # video_strip = vpf.applyGaussianBlur(video_strip, kernel_size=(5,5)) # Apply Gaussian blur to reduce noise before optical flow
-
-    # for i in range(nframes):
-    #     cv2.imshow("Gaussian Blur Video Strip", video_strip[i])
-    #     cv2.imshow("Original Video Strip", video_strip2[i])
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-
-
-    # video_strip = vpf.removeBackgroundSimple(video_strip, first_frame, threshold=20)
-
-    # for i in range(nframes):
-    #     cv2.imshow("Simple Background Subtraction Video Strip", video_strip[i])
-    #     cv2.imshow("Original Video Strip", video_strip2[i])
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-
-    
-
-
-    # framenum = 200
-    # frame = video_strip[framenum]
-    # plot_frame_histogram(frame, frame_number=framenum)
-
-    # plot_fft_frequency_image(frame, frame_number=framenum)
-
-    # # Render matplotlib histogram to a numpy array
-    # hist_image = render_histogram_to_array(frame, frame_number=framenum)
-
-    # # Resize frame to match histogram height for side-by-side display
-    # h_hist, w_hist = hist_image.shape[:2]
-    # frame_resized = cv2.resize(frame, (w_hist, h_hist))
-    # if frame_resized.ndim == 2:
-    #     frame_resized = cv2.cvtColor(frame_resized, cv2.COLOR_GRAY2BGR)
-
-    # # Stack horizontally: raw frame on left, matplotlib histogram on right
-    # combined = np.hstack([frame_resized, hist_image])
-    # cv2.imshow("Frame + Histogram", combined)
-    # cv2.waitKey(0)
-
-
-
-    # for i in range(nframes):
-    #     frame = video_strip[i]
-
-    #     # Render matplotlib histogram to a numpy array
-    #     hist_image = render_histogram_to_array(frame, frame_number=i)
-
-    #     # Resize frame to match histogram height for side-by-side display
-    #     h_hist, w_hist = hist_image.shape[:2]
-    #     frame_resized = cv2.resize(frame, (w_hist, h_hist))
-    #     if frame_resized.ndim == 2:
-    #         frame_resized = cv2.cvtColor(frame_resized, cv2.COLOR_GRAY2BGR)
-
-    #     # Stack horizontally: raw frame on left, matplotlib histogram on right
-    #     combined = np.hstack([frame_resized, hist_image])
-    #     cv2.imshow("Frame + Histogram", combined)
-
-    #     key = cv2.waitKey(30) & 0xFF
-    #     if key == ord('q'):
-    #         break
-    #     if key == ord('p'):
-    #         cv2.waitKey(-1)
-
-    # break
-
 
     background_mask = vpf.createBackgroundMask(first_frame, threshold=20) # Threshold to remove chamber walls
     cv2.imshow("Background Mask", background_mask) # Display background mask for verification, press any key to continue
@@ -372,8 +225,12 @@ for file in all_files:
     cone_angle = np.zeros(nframes, dtype=np.float32)
     cone_angle_reg = np.zeros(nframes, dtype=np.float32)
     close_point_distance = np.zeros(nframes, dtype=np.float32)
+    # store per-side fitted-line angles (degrees, image coords)
+    side_angle_up_arr = np.full(nframes, np.nan, dtype=np.float32)
+    side_angle_low_arr = np.full(nframes, np.nan, dtype=np.float32)
     angle_d = rotation_angle  # rotation angle in degrees
     spray_area = np.zeros(nframes, dtype=np.float32)
+    spray_volume = np.zeros(nframes, dtype=np.float32)
 
     # Load freehand mask created earlier by the user (expects single-channel binary image "mask.png")
     freehand_mask = cv2.imread("mask.png", cv2.IMREAD_GRAYSCALE)
@@ -400,9 +257,12 @@ for file in all_files:
     write_masks_started = False
     # Precompute circular ROI around spray origin (radius = 100 px)
     # Consider changing circle to cone shape later
+    # create second cone mask with a smaller angle to use as a region of interest for detecting motion near the spray origin, which is used to determine when to start writing masks. This helps avoid noise triggering mask writing before the spray actually starts.
     roi_radius = 100
     yy, xx = np.ogrid[:height, :width]
     circle_mask = (xx - origin_x) ** 2 + (yy - origin_y) ** 2 <= roi_radius ** 2
+
+    nozzle_opening_time = 0  # initialize to 0, will be set to first frame with motion near origin
 
     for idx in range(nframes):
         # --- Intensity: per-frame robust normalization invariant to lighting ---
@@ -455,10 +315,12 @@ for file in all_files:
         cumulative_masks[idx] = cumulative_mask.copy()
 
         # Check for high magnitude values near the spray origin to start writing masks
-        if idx >= firstFrameNumber:
-            motion_near_origin = np.any(mag[circle_mask] >= 0.5)
+        if idx >= firstFrameNumber and not write_masks_started:
+            # Needs additional code to avoid noise.
+            motion_near_origin = vpf.calculate_opening_point(circle_mask, mag)
             if motion_near_origin:
                 write_masks_started = True
+                nozzle_opening_time = idx  # set to first frame with motion near origin
                 w_cone = 1.0  # once motion is detected, set cone weight to normal
         else:
             motion_near_origin = False
@@ -524,11 +386,6 @@ for file in all_files:
         # threshold_mask = cv2.dilate(threshold_mask, kernel, iterations=1)
         # threshold_mask = cv2.morphologyEx(threshold_mask, cv2.MORPH_CLOSE, kernel)
 
-
-
-        # Convert spray_origin from (x, y) to (row, col) format for analyze_boundary
-        nozzle_point_rc = np.array([spray_origin[1], spray_origin[0]], dtype=np.float32)
-
         if use_intensity_only or use_cumulative_as_mask:
             # skip clustering for intensity-only mode and cumulative mask mode
             final_mask = fill_holes_in_mask(threshold_mask)
@@ -543,11 +400,32 @@ for file in all_files:
             final_mask = create_cluster_mask(threshold_mask, cluster_distance=20, alpha=30) 
             final_cluster_masks[idx] = final_mask
 
+        # Convert spray_origin from (x, y) to (row, col) format for analyze_boundary
+        # Prepare a clean binary mask for boundary extraction
+        final_mask_bin = (final_mask > 0).astype(np.uint8) * 255
+
+        # Extract contours (OpenCV returns contours as Nx1x2 with (x,y) coordinates)
+        contours, _ = cv2.findContours(final_mask_bin, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+
+        # Convert contours to the (row, col) = (y, x) format expected by calculate_boundary
+        boundary_list = []
+        for cnt in contours:
+            pts = cnt.reshape(-1, 2)  # (N,2) as (x,y)
+            pts_yx = np.column_stack((pts[:, 1], pts[:, 0]))  # (y,x)
+            boundary_list.append(pts_yx.astype(float))
+    
+
         # Store only after motion is detected near the spray origin (latched)
         if write_masks_started:
             combined_masks[idx] = threshold_mask
             # --- Analyze boundary ---
-            frame_boundaries, frame_pen, frame_ang, frame_ang_reg, frame_cpd = analyze_boundary(final_mask, angle_d=angle_d, nozzle_point=nozzle_point_rc)
+            # calculate_boundary(boundary, nozzle_x, nozzle_y, angle_d, ax=None)
+            # returns: penetration, average_angle, fitted_angle, boundary_pixels, close_point_distance, angle_line_up, angle_line_low
+            frame_pen, frame_ang, frame_ang_reg, frame_boundaries, frame_cpd, side_ang_up, side_ang_low = calculate_boundary( # type: ignore
+                boundary_list, spray_origin[0], spray_origin[1], angle_d) 
+            side_angle_up_arr[idx] = side_ang_up
+            side_angle_low_arr[idx] = side_ang_low
+
         else:
             combined_masks[idx] = np.zeros_like(threshold_mask)
             frame_boundaries = []
@@ -558,20 +436,21 @@ for file in all_files:
 
         boundaries.append(frame_boundaries)
         penetration[idx] = frame_pen
-        cone_angle[idx] = frame_ang # may need adjustment based on research paper standard
-        cone_angle_reg[idx] = frame_ang_reg
+        cone_angle[idx] = frame_ang # average angle of boundary points within a certain distance from the penetration tip, relative to the spray origin, in degrees.
+        cone_angle_reg[idx] = frame_ang_reg # same as cone_angle but using a line fitted to the boundary points instead of the raw average
+        # cone angle is follows the boundary better, but cone_angle_reg follows the angle? better.
         close_point_distance[idx] = frame_cpd
         tip_velocity = np.gradient(penetration) # derivative of penetration over time
         spray_area[idx] = np.sum(final_mask > 0)  # number of pixels in mask
-        nozzle_opening_time = 0  # placeholder, needs logic to determine first frame with motion detected
-        nozzle_closing_time = 0  # placeholder, needs logic to determine last frame with high motion
-        # ADD spray volume
 
-        #TODO: add tip velocity (derivative of penetration)
-        #      add spray area (number of pixels in mask)
-        #      add nozzle opening time (frame number - firstFrameNumber with motion detected)
-        #      add nozzle closing time (last frame number with high motion detected? - frame number)
+        spray_volume[idx] =  (np.pi/4) * ((spray_area[idx]**2) * penetration[idx])  # very rough estimate of spray volume based on area and penetration, assumes a cylindrical shape
+        # real spray volume is equal or larger.
 
+    intensity_values, intensity_smoothed, intensity_derivative, min_frame, min_value = calculate_video_intensity(video_strip, combined_masks)
+
+    
+    # Calculate nozzle closing time
+    nozzle_closing_time = vpf.calculate_closing_point(close_point_distance, penetration, intensity_values, spray_area)
 
     print(f"Final masks computed with w_intensity={w_intensity}, w_magnitude={w_magnitude}, w_freehand={w_freehand}, w_cone={w_cone}, intensity_gamma={intensity_gamma}, use_cumulative_as_mask={use_cumulative_as_mask}, dynamic thresholding (Otsu if cumulative mask or intensity-only, else 95th percentile)")
 
@@ -606,6 +485,27 @@ for file in all_files:
         y2 = int(np.clip(tip_y + tip_half_len, 0, height - 1))
         cv2.line(overlay, (tip_x, y1), (tip_x, y2), (0, 255, 255), 3)
         cv2.circle(overlay, (int(origin_x), int(origin_y)), 4, (0, 0, 255), -1) 
+
+        # Draw averaged/fitted side-lines for cone angle (above / below)
+        up_ang = float(side_angle_up_arr[i]) if not np.isnan(side_angle_up_arr[i]) else None
+        low_ang = float(side_angle_low_arr[i]) if not np.isnan(side_angle_low_arr[i]) else None
+        # choose a visible length for the diagnostic lines
+        vis_len = int(max(50, min(width, height, penetration[i] if penetration[i] > 0 else 100)))/2
+
+        def draw_side_line(angle_deg, color):
+            if angle_deg is None or np.isnan(angle_deg):
+                return
+            rad = np.deg2rad(angle_deg)
+            # ensure the line points forward (positive x direction). If cos(rad)<0, flip direction.
+            if np.cos(rad) < 0:
+                rad += np.pi
+            ex = int(np.clip(origin_x + np.cos(rad) * vis_len, 0, width - 1))
+            ey = int(np.clip(origin_y + np.sin(rad) * vis_len, 0, height - 1))
+            cv2.line(overlay, (int(origin_x), int(origin_y)), (ex, ey), color, 3)
+
+        # above = magenta, below = cyan (BGR)
+        draw_side_line(up_ang, (255, 0, 255))
+        draw_side_line(low_ang, (255, 255, 0))
 
         # Resize all images to the same size for stacking (e.g., 640x320)
         def resize(img, size=(640, 320)):
@@ -690,38 +590,6 @@ for file in all_files:
         else:
             print(f"  {k}: {v}")
 
-    # --- Analyze intensity values ---
-    # Needs more work, maybe diffent method to find significant changes
-    intensity_values = np.zeros(nframes, dtype=np.float32)
-    for i in range(nframes):
-        masked_pixels = video_strip[i][combined_masks[i] > 0]
-        intensity_values[i] = float(masked_pixels.mean()) if masked_pixels.size > 0 else 0.0
-
-    # Keep smoothed intensity aligned to the per-frame metrics for plotting/export.
-    window_size = 5
-    if intensity_values.size == 0:
-        intensity_smoothed = np.zeros(0, dtype=np.float32)
-        intensity_derivative = np.zeros(0, dtype=np.float32)
-    else:
-        smoothing_kernel = np.ones(window_size, dtype=np.float32) / window_size
-        intensity_smoothed = np.convolve(intensity_values, smoothing_kernel, mode='same')
-        intensity_derivative = np.diff(intensity_smoothed, prepend=intensity_smoothed[0])
-
-    frame_numbers = np.arange(nframes)
-
-    # only consider frames at least 10 after firstFrameNumber
-    start_offset = 10
-    if len(intensity_derivative) <= start_offset:
-        # not enough frames — fall back to full range
-        min_idx = int(np.argmin(intensity_derivative))
-    else:
-        sliced = intensity_derivative[start_offset:]
-        rel_min = int(np.argmin(sliced))
-        min_idx = rel_min + start_offset
-
-    min_frame = int(frame_numbers[min_idx])
-    min_value = float(intensity_derivative[min_idx])
-    print(f"Lowest intensity derivative at frame {min_frame} (index {min_idx}) = {min_value:.6f}")
 
     # --- Plot all CSV metrics in a grid ---
     frames = np.arange(nframes)
@@ -750,7 +618,6 @@ for file in all_files:
     axes[1, 1].set_xlabel("Frame Number")
 
     axes[1, 2].plot(frames, intensity_values, label="Mean")
-    axes[1, 2].plot(frames, intensity_smoothed, label="Smoothed", linewidth=2)
     axes[1, 2].set_title("Mean Intensity")
     axes[1, 2].set_ylabel("Gray Value")
     axes[1, 2].set_xlabel("Frame Number")
@@ -762,8 +629,10 @@ for file in all_files:
     axes[1, 3].set_ylabel("Gray Value / Frame")
     axes[1, 3].set_xlabel("Frame Number")
 
-    # Hide unused subplot (2x4 grid but only 7 metrics)
-    axes[0, 3].axis("off")
+    axes[0, 3].plot(frames, spray_volume)
+    axes[0, 3].set_title("Spray Volume Estimate")
+    axes[0, 3].set_ylabel("Cubic Pixels")
+    axes[0, 3].set_xlabel("Frame Number")
 
     fig.suptitle("Spray Metrics Over Time")
     fig.tight_layout(rect=[0, 0.03, 1, 0.95])  # type: ignore
@@ -771,9 +640,8 @@ for file in all_files:
 
     # Generate output CSV in a local Results folder
     with open(output_csv, 'w') as f:
-        f.write("Frame,Penetration (pixels), Cone Angle (degrees), Regularized Cone Angle (degrees), Close Point Distance (pixels), Spray Area (pixels^2), Mean Intensity, Smoothed Mean Intensity, Intensity Derivative\n")
+        f.write("Frame,Penetration (pixels), Cone Angle (degrees), Regularized Cone Angle (degrees), Close Point Distance (pixels), Spray Area (pixels^2), Mean Intensity, Intensity Derivative, Spray Volume (cubic pixels), Nozzle Opening Time (frames), Nozzle Closing Time (frames)\n")
         for i in range(nframes):
-            f.write(f"{i},{penetration[i]},{cone_angle[i]},{cone_angle_reg[i]},{close_point_distance[i]},{spray_area[i]},{intensity_values[i]},{intensity_smoothed[i]},{intensity_derivative[i]}\n")
-
+            f.write(f"{i},{penetration[i]},{cone_angle[i]},{cone_angle_reg[i]},{close_point_distance[i]},{spray_area[i]},{intensity_values[i]},{intensity_derivative[i]},{spray_volume[i]},{nozzle_opening_time},{nozzle_closing_time}\n")
 
 print("Processing complete.")
