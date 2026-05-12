@@ -627,3 +627,132 @@ def calculate_opening_point(cone_mask_f, mag):
     motion_near_origin = motion_near_origin and np.any(sustained_motion)
 
     return motion_near_origin
+
+
+def tags_segmentation(spray_img, background_img, cell_size=3, n_bins=9, norm_order=1):
+    import cv2
+    import numpy as np
+    from concurrent.futures import ThreadPoolExecutor
+
+    """
+    Implementation of the TAGS method for spray image segmentation.
+    Multithreaded for gradient statistics computation.
+    """
+
+    def get_gradient_statistics_vectors(img):
+        # 1. Gamma Correction
+        img_gamma = np.sqrt(img.astype(np.float32))
+
+        # 2. Gradient Calculation
+        gx = cv2.copyMakeBorder(img_gamma, 0, 0, 1, 1, cv2.BORDER_REPLICATE)
+        gx = gx[:, 2:] - gx[:, :-2]
+
+        gy = cv2.copyMakeBorder(img_gamma, 1, 1, 0, 0, cv2.BORDER_REPLICATE)
+        gy = gy[2:, :] - gy[:-2, :]
+
+        # 3. Polar Coordinates
+        magnitude, angle = cv2.cartToPolar(gx, gy, angleInDegrees=True)
+
+        # 4. Orientation Statistics
+        h, w = img.shape
+        statistics_volume = np.zeros((h, w, n_bins), dtype=np.float32)
+        bin_width = 360.0 / n_bins
+
+        for i in range(n_bins):
+            lower = i * bin_width
+            upper = (i + 1) * bin_width
+
+            bin_mask = (angle >= lower) & (angle < upper)
+            bin_magnitude = np.where(bin_mask, magnitude, 0)
+
+            statistics_volume[:, :, i] = cv2.boxFilter(
+                bin_magnitude,
+                -1,
+                (cell_size, cell_size),
+                normalize=False
+            )
+
+        # 5. Normalization
+        sum_v = np.sum(statistics_volume, axis=2, keepdims=True)
+        vn = np.divide(
+            statistics_volume,
+            sum_v,
+            out=np.zeros_like(statistics_volume),
+            where=sum_v != 0
+        )
+
+        return vn
+
+    # PARALLEL COMPUTATION OF Vn
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        future_spray = executor.submit(get_gradient_statistics_vectors, spray_img)
+        future_bg    = executor.submit(get_gradient_statistics_vectors, background_img)
+
+        vn_spray = future_spray.result()
+        vn_bg    = future_bg.result()
+
+    # 6. Difference Assessment
+    diff = np.abs(vn_spray - vn_bg)
+
+    if norm_order == 1:
+        diff_map = np.sum(diff, axis=2)
+    else:
+        diff_map = np.power(
+            np.sum(np.power(diff, norm_order), axis=2),
+            1.0 / norm_order
+        )
+
+    # 7. Otsu Thresholding
+    diff_map_8u = cv2.normalize(diff_map, None, 0, 255, cv2.NORM_MINMAX).astype(np.uint8) # type: ignore
+    _, binary_mask = cv2.threshold(
+        diff_map_8u, 0, 255,
+        cv2.THRESH_BINARY + cv2.THRESH_OTSU
+    )
+
+    return binary_mask, diff_map
+
+def applyTAGS(video, background_frame, workers=None):
+    import numpy as np
+    import cv2
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    import os
+
+    nframes = video.shape[0]
+
+    TAGS_segmentation = np.zeros_like(video, dtype=np.uint8)
+    TAGS_segmentation_diff = np.zeros_like(video, dtype=np.float32)
+
+    print("Running TAGS segmentation on video frames (multithreaded)...")
+
+    indices = list(range(nframes))
+    if workers is None:
+        cpu = os.cpu_count() or 1
+        max_workers = min(max(1, cpu), len(indices))
+    else:
+        max_workers = max(1, min(int(workers), len(indices)))
+
+    def process_frame(i):
+        # Select correct background (unchanged)
+        bg = background_frame if i == 0 else video[i - 1]
+
+        binary_mask, diff_map = tags_segmentation(video[i], bg)
+
+        # Post-processing
+        binary_mask = cv2.medianBlur(binary_mask, 3)
+
+        return i, binary_mask, diff_map
+
+    # Run frames in parallel
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(process_frame, i) for i in range(nframes)]
+
+        for future in as_completed(futures):
+            i, binary_mask, diff_map = future.result()
+
+            TAGS_segmentation[i] = binary_mask
+            TAGS_segmentation_diff[i] = diff_map
+
+            if i % 10 == 0 or i == nframes - 1:
+                print(f"Completed TAGS on frame {i}/{nframes}")
+
+    return TAGS_segmentation, TAGS_segmentation_diff

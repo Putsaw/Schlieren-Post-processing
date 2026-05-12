@@ -258,16 +258,28 @@ def calculate_video_intensity(video_strip, combined_masks):
 
     frame_numbers = np.arange(nframes)
 
-    # only consider frames at least 10 after firstFrameNumber
+    # exclude the first `start_offset` frames and the last `end_offset` frames
     start_offset = 10
     end_offset = 10
-    if len(intensity_derivative) <= start_offset:
-        # not enough frames — fall back to full range
-        min_idx = int(np.argmin(intensity_derivative))
+
+    # sanitize offsets
+    start_offset = max(0, int(start_offset))
+    end_offset = max(0, int(end_offset))
+
+    # safe handling for very short videos or empty derivative arrays
+    if len(intensity_derivative) == 0:
+        min_idx = 0
     else:
-        sliced = intensity_derivative[start_offset:]
-        rel_min = int(np.argmin(sliced))
-        min_idx = rel_min + start_offset
+        search_start = start_offset
+        search_end = max(search_start + 1, nframes - end_offset)  # ensure non-empty slice
+
+        if search_end <= search_start:
+            # fallback to full-range search when restricted window would be empty
+            min_idx = int(np.argmin(intensity_derivative))
+        else:
+            search_slice = intensity_derivative[search_start:search_end]
+            rel_min = int(np.argmin(search_slice))
+            min_idx = rel_min + search_start
 
     min_frame = int(frame_numbers[min_idx])
     min_value = float(intensity_derivative[min_idx])

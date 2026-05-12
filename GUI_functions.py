@@ -90,8 +90,8 @@ def draw_freehand_mask(video_strip):
 
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
 
-    cv2.namedWindow("Draw Mask")
-    cv2.setMouseCallback("Draw Mask", draw_mask)
+    cv2.namedWindow("Draw Background Mask")
+    cv2.setMouseCallback("Draw Background Mask", draw_mask)
 
     while True:
         # Ensure overlay is 3-channel BGR (frame may be grayscale)
@@ -104,7 +104,7 @@ def draw_freehand_mask(video_strip):
         mask_bool3 = (mask == 255)[:, :, None]
         overlay = np.where(mask_bool3, np.array([0, 0, 255], dtype=overlay.dtype), overlay)
 
-        cv2.imshow("Draw Mask", overlay)
+        cv2.imshow("Draw Background Mask", overlay)
 
         key = cv2.waitKey(40) & 0xFF
         if key == ord('q'):
@@ -113,7 +113,7 @@ def draw_freehand_mask(video_strip):
             mask[:] = 0
 
     cv2.destroyAllWindows()
-    cv2.imwrite("mask.png", mask)
+    cv2.imwrite("background_mask.png", mask)
 
 
 def draw_and_compare_mask_frames(original_video, predicted_masks, start_frame=0, save_prefix="validation"):
