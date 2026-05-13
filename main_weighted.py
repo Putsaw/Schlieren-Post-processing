@@ -104,9 +104,12 @@ for file in all_files:
     tags_background = video_strip[bg_init_idx].copy()
 
     #TAGS_segmentation, TAGS_segmentation_diff = vpf.applyTAGS(video_strip, tags_background)
-
     #swapped outputs for testing
     TAGS_segmentation_diff, TAGS_segmentation = vpf.applyTAGS(video_strip, tags_background)
+
+    for idx in range(nframes):
+        TAGS_segmentation_diff[idx] = cv2.medianBlur(TAGS_segmentation_diff[idx], 9)
+        TAGS_segmentation_diff[idx] = fill_holes_in_mask(TAGS_segmentation_diff[idx])
 
     # prepare per-frame TAGS weight maps in 0..1 (min-max per frame)
     if 'TAGS_segmentation_diff' in globals() and TAGS_segmentation_diff is not None:
@@ -123,7 +126,6 @@ for file in all_files:
     else:
         tags_mask_norm = np.ones((nframes, height, width), dtype=np.float32)
         
-
     video_strip = vpf.applyCLAHE(video_strip)
 
     ##############################
@@ -131,7 +133,7 @@ for file in all_files:
     ##############################
     use_intensity_only = False  # If True, set w_magnitude=0 and use otsu as thresholding, CONSIDER REMOVING AS CUMULATIVE_MASK DOES THE SAME THING BUT BETTER PROBABLY
 
-    use_cumulative_as_mask = False  # if True, use cumulative_mask to restrict areas for intensity score, and set w_magnitude=0,
+    use_cumulative_as_mask = True  # if True, use cumulative_mask to restrict areas for intensity score, and set w_magnitude=0,
                                     # effectively using cumulative motion detection as a mask for intensity-based detection
     
     if use_intensity_only:
@@ -316,11 +318,23 @@ for file in all_files:
 
         mag_scores[idx] = mag_n
 
+        tags_mask = tags_mask_norm[idx]  # per-frame TAGS-derived weight in [0,1]
+
+        # # X frame running buffer for TAGS mask 
+        # buffer_size = 10
+        # start_idx = max(0, idx - buffer_size // 2)
+        # end_idx = min(nframes, idx + buffer_size // 2 + 1)
+        # tags_mask = tags_mask_norm[start_idx:end_idx].mean(axis=0)
+
+        # cumulative_mask[tags_mask < 0.3] = 0  # remove areas where TAGS mask is low, threshold can be adjusted
+
         # Accumulate areas with mag_n == 1.0
         new_areas = (mag_n > 0.99).astype(np.uint8) * 255
+        # Idea: cumulative mask is built up from optical flow and cut down by TAGS
+        # new frame -> remove with tags -> add new motion.
+
         cumulative_mask = np.maximum(cumulative_mask, new_areas)
         #cumulative_mask = cv2.erode(cumulative_mask, np.ones((3,3), np.uint8), iterations=1)  # erode to keep only consistent areas
-
         cumulative_masks[idx] = cumulative_mask.copy()
 
         # Check for high magnitude values near the spray origin to start writing masks
@@ -351,8 +365,6 @@ for file in all_files:
 
         # --- Cone mask normalized ---
         cone = cone_mask_f  # already 0.0 or 1.0
-
-        tags_mask = tags_mask_norm[idx]  # per-frame TAGS-derived weight in [0,1]
 
         # --- Combine: product (agreement) ---
         comp_int = (intensity_n + eps) ** norm_intensity
@@ -477,7 +489,8 @@ for file in all_files:
 
     # Show combined masks (press 'q' to quit, 'p' to pause)
     video_writer = None
-    video_fps = 30
+    grid_writer = None
+    video_fps = 10
     for i in range(nframes):
         frame = video_strip[i]
         combined = combined_masks[i]
@@ -577,6 +590,12 @@ for file in all_files:
             fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore
             video_writer = cv2.VideoWriter(output_video, fourcc, video_fps, (w, h))
         video_writer.write(overlay)
+
+        if grid_writer is None:
+            gh, gw = grid.shape[:2]
+            fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # type: ignore
+            grid_writer = cv2.VideoWriter(os.path.join(results_dir, 'output_video_grid.mp4'), fourcc, video_fps, (gw, gh))
+        grid_writer.write(grid)
 
         key = cv2.waitKey(100) & 0xFF
         if key == ord('q'):

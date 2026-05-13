@@ -72,8 +72,15 @@ def calculate_boundary(boundary, nozzle_x, nozzle_y, angle_d, ax=None):
         boundary = [] if boundary.size == 0 else [boundary]
 
     if len(boundary) == 0:
+        # No contour found: return consistent 7-tuple so callers can always unpack
         boundary_pixels = np.array([[nozzle_y, nozzle_x]], dtype=float)
-        return 0.0, 0.0, 0.0, boundary_pixels, 0.0
+        penetration = 0.0
+        average_angle = np.nan
+        fitted_angle = np.nan
+        close_point_distance = 0.0
+        cent_ang_up = np.nan
+        cent_ang_low = np.nan
+        return penetration, average_angle, fitted_angle, boundary_pixels, close_point_distance, cent_ang_up, cent_ang_low
 
      # -------------------------------------------------------------------------
     # 1) Combine all contour pieces into one (N, 2) array
